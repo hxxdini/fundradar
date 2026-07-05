@@ -224,3 +224,23 @@ fs.mkdirSync(path.join(ROOT, 'out'), { recursive: true });
 const outPath = path.join(ROOT, 'out', 'site.html');
 fs.writeFileSync(outPath, html);
 console.log(`Site written: ${outPath} (${items.length} live items embedded)`);
+
+// Full standalone document for GitHub Pages (the artifact host supplies its own shell)
+const styleEnd = html.indexOf('</style>') + '</style>'.length;
+const fullDoc = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="FundRadar EA — every open grant, tender and opportunity relevant to East African organizations, tracked from primary sources and updated daily.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+${html.slice(0, styleEnd)}
+</head>
+<body>
+${html.slice(styleEnd)}
+</body>
+</html>
+`;
+fs.mkdirSync(path.join(ROOT, 'docs'), { recursive: true });
+fs.writeFileSync(path.join(ROOT, 'docs', 'index.html'), fullDoc);
+console.log('Pages doc written: docs/index.html');
