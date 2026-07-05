@@ -17,7 +17,7 @@ export async function fetchRetry(url, options = {}, { retries = 3, backoffMs = 2
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await curlFetch(url, options, timeoutMs);
-      if (res.status >= 500 && attempt < retries) {
+      if ((res.status >= 500 || res.status === 429) && attempt < retries) {
         lastErr = new Error(`HTTP ${res.status}`);
       } else {
         return res;

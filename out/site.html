@@ -1,0 +1,191 @@
+<title>FundRadar EA — Live Opportunities</title>
+<style>
+  :root {
+    --paper: #FAFAF7; --ink: #182420; --muted: #5C6B64; --line: #E2E6E0;
+    --panel: #F1F3EE; --accent: #0F7A5C; --accent-ink: #fff;
+    --warn: #B26A00; --crit: #B3341D; --chip: #E8EDE8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #101714; --ink: #E6ECE7; --muted: #8FA098; --line: #24312B;
+      --panel: #16201B; --accent: #3FBE93; --accent-ink: #0B120F;
+      --warn: #E0A33B; --crit: #E76A50; --chip: #1E2A24;
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #FAFAF7; --ink: #182420; --muted: #5C6B64; --line: #E2E6E0;
+    --panel: #F1F3EE; --accent: #0F7A5C; --accent-ink: #fff;
+    --warn: #B26A00; --crit: #B3341D; --chip: #E8EDE8;
+  }
+  :root[data-theme="dark"] {
+    --paper: #101714; --ink: #E6ECE7; --muted: #8FA098; --line: #24312B;
+    --panel: #16201B; --accent: #3FBE93; --accent-ink: #0B120F;
+    --warn: #E0A33B; --crit: #E76A50; --chip: #1E2A24;
+  }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 80px; }
+  a { color: inherit; }
+
+  header.mast { border-bottom: 3px solid var(--ink); padding-bottom: 14px; margin-bottom: 18px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .wordmark { font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 34px; font-weight: 700; letter-spacing: -0.5px; margin: 0; }
+  .wordmark .ea { color: var(--accent); }
+  .tagline { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; }
+  .statline { display: flex; gap: 26px; margin-top: 14px; flex-wrap: wrap; }
+  .stat { display: flex; flex-direction: column; gap: 1px; }
+  .stat b { font: 600 20px/1.2 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+
+  .note { background: var(--panel); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 0 0 22px; font-size: 14px; }
+  .note b { font-family: "Iowan Old Style", Palatino, Georgia, serif; }
+
+  .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; position: sticky; top: 0;
+    background: var(--paper); padding: 12px 0 10px; z-index: 5; border-bottom: 1px solid var(--line); }
+  .row1 { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type=search] { flex: 1; min-width: 220px; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 3px; padding: 8px 12px; font: inherit; }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tabs { display: flex; gap: 2px; }
+  .tabs button { background: none; border: 1px solid var(--line); color: var(--muted); padding: 7px 13px;
+    font: 600 12.5px system-ui, sans-serif; cursor: pointer; letter-spacing: 0.3px; }
+  .tabs button:first-child { border-radius: 3px 0 0 3px; }
+  .tabs button:last-child { border-radius: 0 3px 3px 0; }
+  .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips button { background: var(--chip); border: none; color: var(--ink); border-radius: 20px;
+    padding: 4px 12px; font: 500 12.5px system-ui, sans-serif; cursor: pointer; }
+  .chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .chips button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .count { color: var(--muted); font-size: 12.5px; margin: 10px 2px; }
+
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  .list li { display: flex; gap: 18px; justify-content: space-between; align-items: flex-start;
+    padding: 14px 2px; border-bottom: 1px solid var(--line); }
+  .main { min-width: 0; }
+  .title { font-weight: 600; text-decoration: none; }
+  .title:hover, .title:focus { color: var(--accent); text-decoration: underline; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .meta .amt { color: var(--accent); font-weight: 600; }
+  .tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { background: var(--chip); border-radius: 2px; padding: 1.5px 7px; font-size: 11px; color: var(--muted); }
+  .tag.type { color: var(--ink); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .when { text-align: right; flex-shrink: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums; }
+  .when .date { font-size: 13px; font-weight: 600; }
+  .when .left { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .when.warn .date, .when.warn .left { color: var(--warn); }
+  .when.crit .date, .when.crit .left { color: var(--crit); }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  footer { margin-top: 34px; padding-top: 14px; border-top: 3px solid var(--ink); color: var(--muted); font-size: 12.5px; }
+  footer b { color: var(--ink); }
+  @media (prefers-reduced-motion: no-preference) {
+    .list li { animation: rise .25s ease both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+<div class="wrap">
+  <header class="mast">
+    <div class="brand">
+      <h1 class="wordmark">FundRadar<span class="ea">·EA</span></h1>
+      <span class="tagline">East Africa Funding Intelligence</span>
+    </div>
+    <div class="statline">
+      <div class="stat"><b id="statLive">58</b><span>Live opportunities</span></div>
+      <div class="stat"><b>5</b><span>Sources monitored</span></div>
+      <div class="stat"><b>368</b><span>Tracked total</span></div>
+      <div class="stat"><b>2026-07-05</b><span>Issue №1</span></div>
+    </div>
+  </header>
+
+  <p class="note"><b>Editor's note —</b> The money didn't disappear this year; the <em>map</em> did.
+  With USAID gone and several European donors cutting budgets, what remains is scattered across portals
+  nobody has time to check. We check them. Every deadline below links to its primary source.</p>
+
+  <div class="controls">
+    <div class="row1">
+      <input type="search" id="q" placeholder="Search title, funder, sector…" aria-label="Search opportunities">
+      <div class="tabs" role="group" aria-label="Filter by type">
+        <button data-type="all" aria-pressed="true">All</button>
+        <button data-type="grant" aria-pressed="false">Grants</button>
+        <button data-type="tender" aria-pressed="false">Tenders</button>
+        <button data-type="fellowship" aria-pressed="false">Fellowships</button>
+      </div>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Filter by country"></div>
+  </div>
+  <p class="count" id="count"></p>
+  <ul class="list" id="list"></ul>
+
+  <footer>
+    <b>How this works:</b> FundRadar monitors World Bank procurement, the EU Funding &amp; Tenders portal,
+    UNGM and other primary sources daily. Sector and eligibility tags are automated; deadlines are taken from
+    structured source data where available. <b>Always verify against the linked source before applying.</b>
+    Spotted an error? Tell us — corrections ship within 24 hours.
+  </footer>
+</div>
+<script type="application/json" id="data">[{"t":"Consultancy services to conduct an External audits, vulnerability, and penetration testing","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453310","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-08","c":["Uganda"],"k":["Digital & ICT"],"a":null},{"t":"Fourniture et installation des équipements et matériels informatiques pour les deux UGPs du Projet d'Accès à l'Eau Potable et à l'Assainissement au Burundi (PAEPA)","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454263","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-10","c":["Burundi"],"k":["Health","Water & WASH","Digital & ICT"],"a":null},{"t":"Richard Rooney Postdoctoral Fellowship in African Studies 2026-2027 (up to $70,000)","u":"https://opportunitydesk.org/2026/07/03/richard-rooney-postdoctoral-fellowship-in-african-studies-2026-2027/","f":"","s":"Opportunity Desk","y":"fellowship","d":"2026-07-10","c":[],"k":[],"a":"$70,000"},{"t":"Hiring Consultancy firm for designing Irrigation O&M and Governance Models","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453937","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-13","c":["Rwanda"],"k":["Agriculture & Food","Water & WASH","Governance & Rights"],"a":null},{"t":"Call for Applications: Regional Community Organizing Institute 2026","u":"https://opportunitydesk.org/2026/07/03/regional-community-organizing-institute-2026/","f":"","s":"Opportunity Desk","y":"fellowship","d":"2026-07-14","c":[],"k":["Education","Governance & Rights","Youth"],"a":null},{"t":"Audit externe du PAEPA pour l'Avance de Préparation du Projet et les quinze premiers mois de mise en oeuvre (jusquau 30 juin 2027)","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454903","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-15","c":["Burundi"],"k":["Health","Water & WASH","Digital & ICT"],"a":null},{"t":"Construction of a 20 cubic meter steel-SS42000007966 storage tank","u":"https://www.ungm.org/Public/Notice/306164","f":"IOM","s":"UNGM (UN agencies)","y":"tender","d":"2026-07-15","c":["South Sudan"],"k":[],"a":null},{"t":"Consultancy services for Upscaling of the Data Protection and Privacy Audit and inspection project to cover an additional Ten (10) Government Agencies","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454845","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-16","c":["Uganda"],"k":["Digital & ICT"],"a":null},{"t":"Consultancy Service for Supervision of Amibara Right side embankment works of Awash river Basin in different lots","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454825","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-17","c":["Ethiopia"],"k":["Water & WASH"],"a":null},{"t":"Procurement of Mobile FTT fish smoking Oven under multiple projects (the FAO-Thiaroye processing Technique) 2026.","u":"https://www.ungm.org/Public/Notice/306095","f":"FAO","s":"UNGM (UN agencies)","y":"tender","d":"2026-07-17","c":["South Sudan"],"k":[],"a":null},{"t":"Recrutement d'un partenaire Facilitateur (PF) pour soutenir la sensibilisation, la mobilisation et l'engagement communautaires (SMEC) dans les provinces du Kwango, Kwilu et Maindombe dans le cadre de la mise en œuvre du PROJET STAR DRC","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00447670","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-19","c":["Congo, Democratic Republic of"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Consultancy Services to conduct Training in Device Repair Skills, Business Opportunities and E-Waste Upcycling for Refugees and Host Communities","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454887","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-20","c":["Uganda"],"k":["Digital & ICT","Humanitarian"],"a":null},{"t":"Civil Society, Human Rights and ESG Accountability for an Inclusive South Africa (CS HR ESG SA)","u":"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/tender-details/europeaid/186571/dd/act/za","f":"European Union","s":"EU Funding & Tenders","y":"tender","d":"2026-07-23","c":[],"k":["Governance & Rights"],"a":null},{"t":"Consulting Services for A Baseline Assessment and Contextual Analysis of Kakuma and Dadaab–Hagadera Municipalities","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454193","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-28","c":["Kenya"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Consulting Services for Municipality-Wide Infrastructure Needs Assessment, Feasibility Studies, Detailed Engineering Designs, And Preparation of Procurement Documents and Environmental and Social Instruments – Coast and Eastern Regions - Kenya","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454182","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-28","c":["Kenya"],"k":["Climate & Environment","Livelihoods & Economic Dev"],"a":null},{"t":"Consulting Services for Municipality-Wide Infrastructure Needs Assessment, Feasibility Studies, Detailed Engineering Designs, And Preparation of Procurement Documents and Environmental and Social Instruments – Rift Valley Region - Kenya","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454191","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-28","c":["Kenya"],"k":["Climate & Environment","Livelihoods & Economic Dev"],"a":null},{"t":"Consulting Services for Municipality-Wide Infrastructure Needs Assessment, Feasibility Studies, Detailed Engineering Designs, And Preparation of Procurement Documents and Environmental and Social Instruments – Central Region – Kenya","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454184","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-28","c":["Kenya"],"k":["Climate & Environment","Livelihoods & Economic Dev"],"a":null},{"t":"Consulting Services for Municipality-Wide Infrastructure Needs Assessment, Feasibility Studies, Detailed Engineering Designs, And Preparation of Procurement Documents and Environmental and Social Instruments – Nyanza and Western Regions - Kenya","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454187","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-28","c":["Kenya"],"k":["Climate & Environment","Livelihoods & Economic Dev"],"a":null},{"t":"Consulting Services for Municipality-Wide Infrastructure Needs Assessment, Feasibility Studies, Detailed Engineering Designs, And Preparation of Procurement Documents and Environmental and Social Instruments – North Eastern Region - Kenya","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454189","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-07-28","c":["Kenya"],"k":["Climate & Environment","Livelihoods & Economic Dev"],"a":null},{"t":"Achat de 120 laptop pour les jeunes diplômés et les fonctionnaires de la cohorte 2 dans le cadre de l'IMCP","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454372","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-08-05","c":["Burundi"],"k":["Digital & ICT"],"a":null},{"t":"Supply, installation, and commissioning of cyber threat intelligence platform and Cyber drills for CNII and testing of business continuity plans (4 Lots) - Fy 25-26","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453742","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-08-14","c":["Uganda"],"k":["Digital & ICT"],"a":null},{"t":"EU-Africa Union – food safety","u":"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl6-2023-farm2fork-01-20","f":"Horizon Europe","s":"EU Funding & Tenders","y":"grant","d":"2026-08-31","c":[],"k":["Digital & ICT"],"a":null},{"t":"Google Africa Applied AI Lab 2026","u":"https://opportunitydesk.org/2026/07/03/google-africa-applied-ai-lab-2026/","f":"","s":"Opportunity Desk","y":"fellowship","d":"2026-08-31","c":[],"k":["Digital & ICT"],"a":null},{"t":"Enhancing integrated research and healthcare in sub-Saharan Africa through digital innovation and Artificial Intelligence","u":"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-ju-gh-edctp3-2026-03-digit-02","f":"Horizon Europe","s":"EU Funding & Tenders","y":"grant","d":"2026-09-02","c":[],"k":["Health","Digital & ICT"],"a":null},{"t":"Creative alliances: Fostering global partnerships in cultural policies and CCI innovation","u":"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/horizon-cl2-2026-01-heritage-05","f":"Horizon Europe","s":"EU Funding & Tenders","y":"grant","d":"2026-09-23","c":[],"k":["Digital & ICT"],"a":null},{"t":"ACQUISITION DE 11 VEHICULES DE TERRAIN POUR LE PROJET PERSE","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453759","f":"World Bank","s":"World Bank Procurement","y":"tender","d":"2026-12-03","c":["Congo, Democratic Republic of"],"k":["Education","Humanitarian"],"a":null},{"t":"Uganda Strengthening Public Investment and Asset Management for Growth and Resilience Operation (PIM","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00450262","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Consultancy services to conduct inventory of infestation by invasive species and development of management plans","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454848","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Consultancy services to conduct inventory of infestation by invasive species and development of management plans","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454851","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Procurement of office furniture for regional PCU","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454750","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Consultancy services to supervise the construction of Canopy walk in Sebitoli within KNP","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454695","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Solar powered water pumps","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454665","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Water & WASH","Energy"],"a":null},{"t":"Consultancy services for feasibility study of construction of Bukora medicalised Health centre in Kirehere District","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454780","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Rwanda"],"k":["Health","Gender & Inclusion","Digital & ICT","Humanitarian","Livelihoods & Economic Dev"],"a":null},{"t":"Supply of 87 units of Laptops/tablets to Establish a Database for all project related conflicts and  data management protocols","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454385","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment","Digital & ICT"],"a":null},{"t":"Procurement of water pump with accessories","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454407","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Water & WASH"],"a":null},{"t":"Construction materials for SSI","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454463","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":[],"a":null},{"t":"Provision of Audit service","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454628","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Kenya"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Procurement of Microsoft Office 365","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454417","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["South Sudan"],"k":["Energy"],"a":null},{"t":"Procurement of local materials for construction","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454496","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":[],"a":null},{"t":"Recrutement d'un Consultant chargé de la vérification et de la contre vérification externe des prestations de santé du PMNS et l’évaluation des services de NAC et de PF des ONG et le monitoring externe périodique des interventions du PMNS","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454637","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Congo, Democratic Republic of"],"k":["Agriculture & Food","Health"],"a":null},{"t":"Construction of /community pond 1 site /weir 2 site","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454327","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia","Somalia"],"k":[],"a":null},{"t":"Procurement of pulse crop seeds. \n(Haricot bean, mung beans, cow pea and pigeon pea)","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454260","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Agriculture & Food","Livelihoods & Economic Dev"],"a":null},{"t":"BOTTLENECK IMPROVEMENTS FOR CONSTRUCTION OF ARCH BRIDGES (3 Nos.) ALONG MAKUSI-IGENGE ROAD IN MAKETE DISTRICT.","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454211","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Tanzania"],"k":["Gender & Inclusion","Digital & ICT","Livelihoods & Economic Dev"],"a":null},{"t":"Supply and delivery of Electric fencing materials for 50kms (Electricals, Non-Electricals and Plastic poles)","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453936","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Supply and delivery of Electric fencing materials for 50kms (Electricals, Non-Electricals and Plastic poles)","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453935","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Supply and delivery of Electric fencing materials for 50kms (Electricals, Non-Electricals and Plastic poles)","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453934","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Procurement of soil lime for acidic soil treatment","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453948","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Design and establishment of an online reservation and payment system for Ecotourism activities in Central Forest Reserves","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00454078","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Uganda"],"k":["Climate & Environment"],"a":null},{"t":"Procurement of Independent Verification Agency (ESS) to verify DLIs/DLRs as indicated in the verification protocol for 5 years","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453722","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Education"],"a":null},{"t":"Local construction materials /gravel 28 truck /masonry 100 truck /sand 75 truck /water 300 m3","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453897","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia","Somalia"],"k":["Water & WASH"],"a":null},{"t":"Commvault Back up & recovery key, SoC Solution (SIEM & SOAR) key, and GitHub Enterprise Cloud Key","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453640","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":[],"a":null},{"t":"Construction of vermin culture centre for 4 nurseries","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453816","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Consultancy Service of \"Budget Preparation Improvement (From Line-item Budgeting to Program Based Budgeting, credibility and Transparency\" for Budget Dept. MoF&ED","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453575","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Somalia"],"k":[],"a":null},{"t":"Commvault Back up & recovery key, SoC Solution (SIEM & SOAR) key, and GitHub Enterprise Cloud Key","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453636","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":[],"a":null},{"t":"Construction of vermin culture centre for 4 nurseries","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453811","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia"],"k":["Livelihoods & Economic Dev"],"a":null},{"t":"Physical Infrastructure for NAO","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453570","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Somalia"],"k":[],"a":null},{"t":"Industrial construction materials /cement 500 bag /rebar 100 no /timber wood 300 no /iron sheet 400 no","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453891","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia","Somalia"],"k":[],"a":null},{"t":"Procurement of /geomembranes 8 no","u":"https://projects.worldbank.org/en/projects-operations/procurement-detail/OP00453895","f":"World Bank","s":"World Bank Procurement","y":"tender","d":null,"c":["Ethiopia","Somalia"],"k":[],"a":null}]</script>
+<script>
+  const DATA = JSON.parse(document.getElementById('data').textContent);
+  const list = document.getElementById('list');
+  const q = document.getElementById('q');
+  const chipsEl = document.getElementById('chips');
+  const countEl = document.getElementById('count');
+  let type = 'all', country = 'all', query = '';
+
+  const countryCounts = {};
+  DATA.forEach(o => o.c.forEach(c => { const n = c.split(',')[0]; countryCounts[n] = (countryCounts[n] || 0) + 1; }));
+  const countries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
+  chipsEl.innerHTML = '<button data-c="all" aria-pressed="true">All countries</button>' +
+    countries.map(([c, n]) => '<button data-c="' + c + '" aria-pressed="false">' + c + ' (' + n + ')</button>').join('') +
+    '<button data-c="regional" aria-pressed="false">Regional / Global</button>';
+
+  const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
+  function daysLeft(d) { return Math.round((new Date(d + 'T00:00:00') - TODAY) / 86400000); }
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+
+  function render() {
+    const out = DATA.filter(o => {
+      if (type !== 'all' && o.y !== type) return false;
+      if (country === 'regional' && o.c.length > 0) return false;
+      if (country !== 'all' && country !== 'regional' && !o.c.some(c => c.startsWith(country))) return false;
+      if (query) {
+        const hay = (o.t + ' ' + o.f + ' ' + o.s + ' ' + o.k.join(' ') + ' ' + o.c.join(' ')).toLowerCase();
+        if (!query.toLowerCase().split(/\s+/).every(w => hay.includes(w))) return false;
+      }
+      return true;
+    });
+    countEl.textContent = out.length + ' of ' + DATA.length + ' live opportunities';
+    if (!out.length) { list.innerHTML = '<li class="empty">Nothing matches — widen the filters.</li>'; return; }
+    list.innerHTML = out.map(o => {
+      let when = '<span class="date">no date</span><span class="left">see source</span>', cls = '';
+      if (o.d) {
+        const dl = daysLeft(o.d);
+        cls = dl <= 7 ? ' crit' : dl <= 21 ? ' warn' : '';
+        when = '<span class="date">' + o.d + '</span><span class="left">' + (dl === 0 ? 'closes today' : dl + ' days left') + '</span>';
+      }
+      const meta = [o.f, o.c.map(c => c.split(',')[0]).join(', ')].filter(Boolean).join(' · ');
+      return '<li><div class="main">' +
+        '<a class="title" href="' + esc(o.u) + '" target="_blank" rel="noopener">' + esc(o.t) + '</a>' +
+        '<div class="meta">' + esc(meta) + (o.a ? ' · <span class="amt">' + esc(o.a) + '</span>' : '') + ' · via ' + esc(o.s) + '</div>' +
+        '<div class="tags"><span class="tag type">' + o.y + '</span>' + o.k.slice(0, 4).map(k => '<span class="tag">' + esc(k) + '</span>').join('') + '</div>' +
+        '</div><div class="when' + cls + '">' + when + '</div></li>';
+    }).join('');
+  }
+
+  q.addEventListener('input', () => { query = q.value.trim(); render(); });
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+    type = b.dataset.type;
+    document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    render();
+  }));
+  chipsEl.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    country = b.dataset.c;
+    chipsEl.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    render();
+  });
+  render();
+</script>
