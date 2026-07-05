@@ -19,10 +19,17 @@ sources (APIs/RSS/scrapers) → normalize + classify → SQLite → weekly diges
 | World Bank procurement | JSON API v2 | filtered to EA countries, live deadlines |
 | EU Funding & Tenders (SEDIA) | multipart search API | open + forthcoming calls, EN |
 | UNGM (all UN agencies) | POST search, HTML rows | filtered to EA countries |
+| Uganda eGP (PPDA) | HTML tables, 4 tabs | micro-procurement windows are ~1 day; mostly empty on weekends |
+| Kenya PPIP (tenders.go.ke) | JSON API | aggressive rate limiting — slow paging + 429 retries |
+| Web Radar | Google News RSS + Bing RSS, 7 queries | broad discovery; **unverified leads**, labeled as such |
 | fundsforNGOs | RSS | feed capped at 1 item by site — needs page scraper (backlog) |
 | Opportunity Desk | RSS | fellowships/prizes |
 
-Dead/backlog: UNDP export feed (404 — UNGM covers UNDP notices), fundsforNGOs category pages (JS-rendered), AfDB, FCDO DevTracker, foundation pages (Mastercard, Segal, Hilton), Global Fund, GCF.
+Dead/backlog: UNDP export feed (404 — UNGM covers UNDP notices), fundsforNGOs category pages (JS-rendered), AfDB, FCDO DevTracker, Tanzania NeST, Rwanda Umucyo, foundation pages (Mastercard, Segal, Hilton), Global Fund, GCF.
+
+## Auto-update
+
+A GitHub Actions workflow (`.github/workflows/daily.yml`) runs the full pipeline **daily at 07:00 EAT**, regenerates the digest and site, and commits `data/` + `out/` back to the repo — the repo is the database, with full history of every change ("git scraping"). Trigger manually with `gh workflow run daily-pipeline`. GitHub runners also dodge the local sandbox's flaky DNS.
 
 ## Design decisions
 
