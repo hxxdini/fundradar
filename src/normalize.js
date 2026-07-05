@@ -151,7 +151,8 @@ export function isEaRelevant(countries, text) {
 
 export function enrich(base) {
   const text = `${base.title} ${base.summary ?? ''}`;
-  const countries = detectCountries(text);
+  // Merge explicit source countries (authoritative) with text detection
+  const countries = [...new Set([...(base.countries ?? []), ...detectCountries(text)])];
   return {
     ...base,
     countries,
