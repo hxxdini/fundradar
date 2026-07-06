@@ -6,6 +6,20 @@ import { fetchRetry } from '../http.js';
 const BASE = 'https://egpuganda.go.ug';
 const PAGES = ['/bid-notices', '/bid-notices/consultancy', '/bid-notices/supplies', '/bid-notices/works'];
 
+// The listing tables truncate the Subject column to ~20 chars + "...". The full
+// text is on each notice's detail page under "Subject of Procurement".
+async function fetchFullSubject(noticeUrl) {
+  try {
+    const res = await fetchRetry(`${BASE}${noticeUrl}`, {}, { timeoutMs: 60000 });
+    if (!res.ok) return null;
+    const text = stripHtml(await res.text()).replace(/\s+/g, ' ');
+    const m = text.match(/Subject of Procurement\s+([\s\S]*?)\s+Procurement Method/);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchUgandaEgp() {
   const seen = new Set();
   const out = [];
@@ -39,11 +53,13 @@ export async function fetchUgandaEgp() {
       if (deadline && deadline < today) continue;
 
       seen.add(noticeId);
+      const fullSubject = subject.endsWith('...') ? await fetchFullSubject(noticeUrl) : null;
+
       out.push(enrich({
         id: makeId('uganda-egp', noticeId),
         source: 'Uganda eGP (PPDA)',
         funder: entity || 'Government of Uganda',
-        title: subject.slice(0, 300),
+        title: (fullSubject || subject).slice(0, 300),
         url: `${BASE}${noticeUrl}`,
         summary: `${entity} — ${cells.find((c) => /bidding|tender|quotation|proposal/i.test(c)) ?? 'bid notice'}`,
         type: 'tender',

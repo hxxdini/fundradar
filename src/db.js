@@ -43,6 +43,7 @@ export function upsertOpportunity(db, o) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       last_seen = excluded.last_seen,
+      title     = CASE WHEN excluded.title LIKE '%...' AND opportunities.title NOT LIKE '%...' THEN opportunities.title ELSE excluded.title END,
       deadline  = COALESCE(excluded.deadline, opportunities.deadline),
       summary   = COALESCE(excluded.summary, opportunities.summary),
       amount    = COALESCE(excluded.amount, opportunities.amount)
