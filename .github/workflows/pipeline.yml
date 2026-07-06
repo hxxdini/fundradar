@@ -1,8 +1,8 @@
-name: hourly-pipeline
+name: fundradar-pipeline
 
 on:
   schedule:
-    - cron: '7 * * * *' # every hour, :07 past (off the hour to dodge GitHub's peak-minute scheduling delays)
+    - cron: '7 */4 * * *' # every 4 hours, :07 past (off the hour to dodge GitHub's peak-minute scheduling delays)
   workflow_dispatch: {}
 
 concurrency:
