@@ -49,21 +49,26 @@ for (const [name, fetcher] of SOURCES) {
   }
 }
 
+// "live" mirrors exactly what site.js/digest.js show as the live count: EA-relevant,
+// plus either a future deadline or no parsed deadline but seen in the last 14 days.
+// (Earlier this counted ANY row with a future deadline regardless of ea_relevant —
+// inflated by hundreds of non-EA Kenya PPIP tenders — which made the Telegram
+// summary disagree with the number on the site itself.)
 const stats = db.prepare(`
   SELECT
     COUNT(*) AS total,
     SUM(ea_relevant) AS ea,
-    SUM(CASE WHEN deadline >= date('now') THEN 1 ELSE 0 END) AS live_deadline
+    SUM(CASE WHEN ea_relevant = 1 AND (deadline >= date('now') OR (deadline IS NULL AND first_seen >= datetime('now', '-14 days'))) THEN 1 ELSE 0 END) AS live
   FROM opportunities
 `).get();
 
 console.log(`\nRun complete: ${totalSeen} records processed, ${totalNew} new.`);
-console.log(`Database: ${stats.total} opportunities | ${stats.ea} EA-relevant | ${stats.live_deadline} with live deadlines.`);
+console.log(`Database: ${stats.total} opportunities | ${stats.ea} EA-relevant | ${stats.live} live on site.`);
 
 fs.writeFileSync(SUMMARY_PATH, JSON.stringify({
   ranAt: new Date().toISOString(),
   totalNew,
   totalSeen,
   perSource,
-  db: { total: stats.total, ea: stats.ea, liveDeadline: stats.live_deadline },
+  db: { total: stats.total, ea: stats.ea, live: stats.live },
 }, null, 2));

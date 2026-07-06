@@ -19,7 +19,7 @@ let lines = [`🛰 FundRadar pipeline run`];
 if (fs.existsSync(SUMMARY_PATH)) {
   const s = JSON.parse(fs.readFileSync(SUMMARY_PATH, 'utf8'));
   lines.push(`${s.totalNew} new opportunities — ${s.totalSeen} checked across ${s.perSource.length} sources`);
-  lines.push(`DB: ${s.db.total} total | ${s.db.ea} EA-relevant | ${s.db.liveDeadline} live deadlines`);
+  lines.push(`DB: ${s.db.total} total | ${s.db.ea} EA-relevant | ${s.db.live} live on site`);
 
   const failed = s.perSource.filter(x => x.error);
   const withNew = s.perSource.filter(x => !x.error && x.added > 0);
