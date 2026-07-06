@@ -94,6 +94,12 @@
   .brief .eyebrow { margin-bottom: 6px; }
   .brief p { font-size: 13.5px; margin: 0; }
 
+  /* ---------- subscribe ---------- */
+  .subscribe-card { background: var(--surface); border-left: 3px solid var(--signal); border-radius: 0 6px 6px 0;
+    padding: 13px 16px 2px; margin: 20px 0 8px; max-width: 480px; }
+  .subscribe-card .eyebrow { margin-bottom: 2px; }
+  .subscribe-card iframe { width: 100%; max-width: 480px; display: block; }
+
   /* ---------- controls ---------- */
   .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; position: sticky; top: 0;
     background: var(--paper); padding: 10px 0; z-index: 5; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
@@ -246,6 +252,11 @@
       </div>
     </div>
   </header>
+
+  <div class="subscribe-card">
+    <p class="eyebrow">Get the weekly digest</p>
+    <iframe src="https://fundradar.substack.com/embed?transparent=1" width="480" height="150" style="border:0; background:transparent;" frameborder="0" scrolling="no"></iframe>
+  </div>
 
   <div class="rail-head">
     <p class="eyebrow"><span class="crit-dot">&#9679;</span> Closing within 7 days</p>
