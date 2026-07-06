@@ -22,6 +22,7 @@ sources (APIs/RSS/scrapers) → normalize + classify → SQLite → weekly diges
 | Uganda eGP (PPDA) | HTML tables, 4 tabs | micro-procurement windows are ~1 day; mostly empty on weekends |
 | Kenya PPIP (tenders.go.ke) | JSON API | aggressive rate limiting — slow paging + 429 retries |
 | Web Radar | Google News RSS + Bing RSS, 7 queries | broad discovery; **unverified leads**, labeled as such |
+| AECF (Africa Enterprise Challenge Fund) | HTML, single curated page | low volume (single digits) but current and directly EA-relevant; no published deadlines (rolling windows) |
 | fundsforNGOs | RSS | feed capped at 1 item by site — needs page scraper (backlog) |
 | Opportunity Desk | RSS | fellowships/prizes |
 
