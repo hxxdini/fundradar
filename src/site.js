@@ -162,15 +162,15 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
 
   /* ---------- brief ---------- */
   .brief { background: var(--surface); border-left: 3px solid var(--signal); border-radius: 0 6px 6px 0;
-    padding: 13px 16px; margin: 20px 0 22px; max-width: 74ch; }
+    padding: 13px 16px; margin: 20px 0 22px; }
   .brief .eyebrow { margin-bottom: 6px; }
-  .brief p { font-size: 13.5px; margin: 0; }
+  .brief p { font-size: 13.5px; margin: 0; max-width: 90ch; }
 
   /* ---------- subscribe ---------- */
   .subscribe-card { background: var(--surface); border-left: 3px solid var(--signal); border-radius: 0 6px 6px 0;
-    padding: 13px 16px 2px; margin: 20px 0 8px; max-width: 480px; }
+    padding: 13px 16px 2px; margin: 20px 0 8px; }
   .subscribe-card .eyebrow { margin-bottom: 2px; }
-  .subscribe-card iframe { width: 100%; max-width: 480px; display: block; }
+  .subscribe-card iframe { width: 100%; display: block; }
 
   /* ---------- controls ---------- */
   .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; position: sticky; top: 0;
