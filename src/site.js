@@ -1,6 +1,8 @@
 // Generates out/site.html (artifact fragment) and docs/index.html (full document
-// for GitHub Pages) — a searchable, virtualized console of live EA-relevant
-// opportunities. All per-item text (titles, funders, summaries — scraped, untrusted)
+// for GitHub Pages) — a searchable console of live EA-relevant opportunities.
+// Titles render in full (no truncation) — the list is not virtualized, since the
+// live population is bounded by open deadlines rather than growing unbounded.
+// All per-item text (titles, funders, summaries — scraped, untrusted)
 // is rendered client-side through esc(); only literal source names and computed
 // numbers/dates are ever interpolated server-side.
 import fs from 'node:fs';
@@ -152,8 +154,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     border-radius: 7px; padding: 11px 13px; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
   .rail-card:hover { border-color: var(--crit); }
   .rail-days { font: 700 20px var(--mono); color: var(--crit); font-variant-numeric: tabular-nums; }
-  .rail-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .rail-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; }
   .rail-meta { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rail-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
 
@@ -212,26 +213,25 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
   .count { color: var(--muted); font-size: 12.5px; margin: 0 2px 8px; }
   .count b { color: var(--ink); font-variant-numeric: tabular-nums; }
   .viewport { border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
-    overflow-y: auto; -webkit-overflow-scrolling: touch; height: min(72vh, 760px); position: relative; }
-  .sizer { position: relative; }
-  .pool { position: absolute; top: 0; left: 0; right: 0; }
-  .row { display: flex; align-items: center; gap: 12px; height: 76px; padding: 0 14px;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: min(72vh, 760px); position: relative; }
+  .pool { display: flex; flex-direction: column; }
+  .row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
     border-bottom: 1px solid var(--line); box-sizing: border-box; }
   .row:hover { background: var(--surface2); }
   .star { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--line); flex-shrink: 0;
-    width: 28px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
+    width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
   .star.active { color: var(--signal); }
   .star:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
-  .row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
-  .row-title-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
-  .row-title { font-weight: 600; font-size: 14px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .row-title-line { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; }
+  .row-title { font-weight: 600; font-size: 14px; line-height: 1.4; text-decoration: none; word-break: break-word; }
   .row-title:hover, .row-title:focus { color: var(--signal); text-decoration: underline; }
   .badge-new { font: 700 9.5px var(--sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--good);
     border: 1px solid var(--good); border-radius: 3px; padding: 1px 5px; flex-shrink: 0; }
   .row-meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-meta .amt { color: var(--signal); font-weight: 600; }
   .tag-type { font: 600 10px var(--sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink);
-    background: var(--chip); border-radius: 3px; padding: 1px 6px; margin-right: 6px; }
+    background: var(--chip); border-radius: 3px; padding: 1px 6px; margin-right: 6px; flex-shrink: 0; }
   .row-when { text-align: right; flex-shrink: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; width: 96px; }
   .row-when .rdate { display: block; font-size: 11.5px; color: var(--muted); }
   .row-when .rleft { display: block; font-size: 14px; font-weight: 700; margin-top: 1px; }
@@ -267,7 +267,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     .tabs button { flex: 1; padding: 9px 4px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     select, .toggle { flex: 1; }
 
-    .row { gap: 8px; padding: 0 10px; }
+    .row { gap: 8px; padding: 10px; }
     .tag-type { padding: 1px 5px; font-size: 9px; margin-right: 4px; }
     .row-title { font-size: 13.5px; }
     .row-meta { font-size: 11px; }
@@ -349,9 +349,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     <main class="results">
       <p class="count" id="count"></p>
       <div class="viewport" id="viewport" tabindex="0">
-        <div class="sizer" id="sizer">
-          <div class="pool" id="pool" role="list" aria-label="Opportunities"></div>
-        </div>
+        <div class="pool" id="pool" role="list" aria-label="Opportunities"></div>
       </div>
     </main>
   </div>
@@ -381,7 +379,6 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
   var countEl = document.getElementById('count');
   var railEl = document.getElementById('rail');
   var viewport = document.getElementById('viewport');
-  var sizer = document.getElementById('sizer');
   var pool = document.getElementById('pool');
   var themeToggle = document.getElementById('themeToggle');
 
@@ -389,7 +386,6 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   };
 
-  var ROW_H = 76, OVERSCAN = 6;
   var state = { type: 'all', country: 'all', sector: 'all', query: '', sort: 'deadline_asc', shortlistOnly: false };
   var current = [];
 
@@ -500,7 +496,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
       '<button class="star' + (starred ? ' active' : '') + '" data-id="' + esc(o.id) + '" aria-pressed="' + starred + '" aria-label="Add to shortlist">' + (starred ? '★' : '☆') + '</button>' +
       '<div class="row-main">' +
         '<div class="row-title-line"><span class="tag-type">' + o.y + '</span>' +
-        '<a class="row-title" href="' + esc(o.u) + '" target="_blank" rel="noopener" title="' + esc(o.t) + '">' + esc(o.t) + '</a>' +
+        '<a class="row-title" href="' + esc(o.u) + '" target="_blank" rel="noopener">' + esc(o.t) + '</a>' +
         (isNew ? '<span class="badge-new">New</span>' : '') + '</div>' +
         '<div class="row-meta" title="' + esc(meta + ' · via ' + o.s) + '">' + esc(meta) + (o.a ? ' · <span class="amt">' + esc(o.a) + '</span>' : '') + ' · via ' + esc(o.s) + '</div>' +
       '</div>' +
@@ -508,20 +504,13 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     '</div>';
   }
 
-  function renderWindow() {
+  function renderList() {
     if (!current.length) {
-      sizer.style.height = '0px';
-      pool.style.transform = 'none';
       pool.innerHTML = '<p class="empty">Nothing matches — widen the filters.</p>';
       return;
     }
-    sizer.style.height = (current.length * ROW_H) + 'px';
-    var scrollTop = viewport.scrollTop, viewH = viewport.clientHeight || 600;
-    var start = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
-    var end = Math.min(current.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
-    pool.style.transform = 'translateY(' + (start * ROW_H) + 'px)';
     var html = '';
-    for (var i = start; i < end; i++) html += rowHtml(current[i], i);
+    for (var i = 0; i < current.length; i++) html += rowHtml(current[i], i);
     pool.innerHTML = html;
   }
 
@@ -529,7 +518,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     current = DATA.filter(matches).sort(sortFn);
     countEl.innerHTML = '<b>' + current.length + '</b> of ' + DATA.length + ' live opportunities';
     viewport.scrollTop = 0;
-    renderWindow();
+    renderList();
   }
 
   // ---------- wiring ----------
@@ -571,13 +560,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     var id = star.dataset.id;
     if (shortlist.has(id)) shortlist.delete(id); else shortlist.add(id);
     saveShortlist();
-    renderWindow();
-  });
-  var ticking = false;
-  viewport.addEventListener('scroll', function () {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(function () { renderWindow(); ticking = false; });
+    renderList();
   });
   document.addEventListener('keydown', function (e) {
     if (e.key !== '/') return;
