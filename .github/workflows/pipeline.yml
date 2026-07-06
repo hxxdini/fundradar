@@ -35,6 +35,7 @@ jobs:
           git pull --rebase -X ours origin main
           git push
       - name: Force a Pages (re)build and confirm it lands
+        id: pages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -49,3 +50,11 @@ jobs:
           done
           echo "::error::GitHub Pages build did not succeed after retries — site may be stale"
           exit 1
+      - name: Notify Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PAGES_OUTCOME: ${{ steps.pages.outcome }}
+        run: node src/notify-telegram.js

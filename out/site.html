@@ -68,11 +68,13 @@
   /* ---------- closing-soon rail ---------- */
   .rail-head { display: flex; align-items: baseline; justify-content: space-between; margin: 22px 0 8px; }
   .eyebrow { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted); margin: 0; }
-  .eyebrow .crit-dot { color: var(--crit); }
-  .rail { display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px 14px; scroll-snap-type: x proximity; }
+  .eyebrow .crit-dot { color: var(--crit); display: inline-block; }
+  .rail { display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 2px 2px 14px; scroll-behavior: smooth; }
+  .rail.snap { scroll-snap-type: x proximity; }
   .rail-card { scroll-snap-align: start; flex: 0 0 208px; background: var(--surface); border: 1px solid var(--line);
-    border-radius: 7px; padding: 11px 13px; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
-  .rail-card:hover { border-color: var(--crit); }
+    border-radius: 7px; padding: 11px 13px; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px;
+    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  .rail-card:hover { border-color: var(--crit); transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
   .rail-days { font: 700 20px var(--mono); color: var(--crit); font-variant-numeric: tabular-nums; }
   .rail-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; }
   .rail-meta { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -136,8 +138,9 @@
     overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: min(72vh, 760px); position: relative; }
   .pool { display: flex; flex-direction: column; }
   .row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
-    border-bottom: 1px solid var(--line); box-sizing: border-box; }
+    border-bottom: 1px solid var(--line); box-sizing: border-box; transition: background-color .12s ease; }
   .row:hover { background: var(--surface2); }
+  .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 6px; flex-shrink: 0; }
   .star { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--line); flex-shrink: 0;
     width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center; }
   .star.active { color: var(--signal); }
@@ -199,6 +202,8 @@
   @media (prefers-reduced-motion: no-preference) {
     .row { animation: rise .18s ease both; }
     @keyframes rise { from { opacity: 0; } to { opacity: 1; } }
+    .crit-dot, .live-dot { animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }
   }
 </style>
 <div class="wrap">
@@ -387,6 +392,41 @@
       (soonest ? ' — the nearest deadline is in ' + daysLeft(soonest.d) + ' days.' : '.') + '</p>';
   }
 
+  // ---------- rail auto-scroll (paused on hover/touch/focus, off for reduced-motion) ----------
+  if (closing.length > 2 && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var railPaused = false, railResuming = null;
+    (function railTick() {
+      if (!railPaused) {
+        var max = railEl.scrollWidth - railEl.clientWidth;
+        if (max > 1) {
+          if (railEl.scrollLeft >= max - 1) {
+            railPaused = true;
+            railResuming = setTimeout(function () {
+              railEl.scrollTo({ left: 0, behavior: 'smooth' });
+              railResuming = setTimeout(function () { railPaused = false; }, 600);
+            }, 1400);
+          } else {
+            railEl.scrollLeft += 0.55;
+          }
+        }
+      }
+      requestAnimationFrame(railTick);
+    })();
+    ['mouseenter', 'focusin', 'touchstart'].forEach(function (ev) {
+      railEl.addEventListener(ev, function () {
+        railPaused = true;
+        railEl.classList.add('snap');
+        if (railResuming) { clearTimeout(railResuming); railResuming = null; }
+      }, { passive: true });
+    });
+    ['mouseleave', 'focusout'].forEach(function (ev) {
+      railEl.addEventListener(ev, function () {
+        railEl.classList.remove('snap');
+        railPaused = false;
+      }, { passive: true });
+    });
+  }
+
   // ---------- filter + sort ----------
   function matches(o) {
     if (state.type !== 'all' && o.y !== state.type) return false;
@@ -495,5 +535,19 @@
   });
 
   refilter();
+
+  // ---------- hero number count-up ----------
+  var statLiveEl = document.getElementById('statLive');
+  if (statLiveEl && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var target = parseInt(statLiveEl.textContent, 10) || 0;
+    var start = null, dur = 700;
+    function tick(ts) {
+      if (start === null) start = ts;
+      var p = Math.min(1, (ts - start) / dur);
+      statLiveEl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
 })();
 </script>
