@@ -1,5 +1,8 @@
-// Generates out/site.html — a self-contained, searchable view of live EA-relevant
-// opportunities. Emitted as a body fragment (Artifact/host provides the document shell).
+// Generates out/site.html (artifact fragment) and docs/index.html (full document
+// for GitHub Pages) — a searchable, virtualized console of live EA-relevant
+// opportunities. All per-item text (titles, funders, summaries — scraped, untrusted)
+// is rendered client-side through esc(); only literal source names and computed
+// numbers/dates are ever interpolated server-side.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +13,7 @@ const today = new Date().toISOString().slice(0, 10);
 const db = openDb();
 
 const rows = db.prepare(`
-  SELECT title, url, funder, source, type, deadline, countries, sectors, amount
+  SELECT id, title, url, funder, source, type, deadline, countries, sectors, amount, first_seen
   FROM opportunities
   WHERE ea_relevant = 1
     AND (deadline >= ? OR (deadline IS NULL AND first_seen >= datetime('now', '-14 days')))
@@ -18,205 +21,546 @@ const rows = db.prepare(`
 `).all(today);
 
 const items = rows.map((r) => ({
-  t: r.title, u: r.url, f: r.funder ?? '', s: r.source,
+  id: r.id, t: r.title, u: r.url, f: r.funder ?? '', s: r.source,
   y: r.type === 'grant' ? 'grant' : r.type === 'tender' ? 'tender' : 'fellowship',
   d: r.deadline, c: JSON.parse(r.countries ?? '[]'), k: JSON.parse(r.sectors ?? '[]'),
-  a: r.amount,
+  a: r.amount, n: r.first_seen.slice(0, 10),
 }));
+
 const nSources = db.prepare('SELECT COUNT(DISTINCT source) c FROM opportunities').get().c;
 const nTotal = db.prepare('SELECT COUNT(*) c FROM opportunities').get().c;
+
+// Daily discovery counts, last 14 days — for the sparkline. Full table (not just
+// currently-live items), so an item that has since expired still counts on the
+// day it was first found.
+const dailyRaw = db.prepare(`
+  SELECT substr(first_seen, 1, 10) d, COUNT(*) c
+  FROM opportunities
+  WHERE ea_relevant = 1 AND first_seen >= datetime('now', '-13 days', 'start of day')
+  GROUP BY d
+`).all();
+const dailyMap = new Map(dailyRaw.map((r) => [r.d, r.c]));
+const daily = Array.from({ length: 14 }, (_, i) => {
+  const d = new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10);
+  return { date: d, count: dailyMap.get(d) ?? 0 };
+});
+
+// Source ledger — names here are literal strings from our own fetcher code
+// (e.g. "World Bank Procurement"), never scraped text, so safe to interpolate directly.
+const sourceMeta = db.prepare(`
+  SELECT source, COUNT(*) total, MAX(last_seen) latest FROM opportunities GROUP BY source ORDER BY total DESC
+`).all();
+
+function sparklineSvg(series) {
+  const W = 220, H = 44, PAD = 3;
+  const max = Math.max(1, ...series.map((d) => d.count));
+  const stepX = (W - 2 * PAD) / (series.length - 1);
+  const pts = series.map((d, i) => ({
+    x: PAD + i * stepX,
+    y: H - PAD - (d.count / max) * (H - 2 * PAD),
+    ...d,
+  }));
+  const line = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const area = line + ` L${pts[pts.length - 1].x.toFixed(1)},${H - PAD} L${pts[0].x.toFixed(1)},${H - PAD} Z`;
+  const last = pts[pts.length - 1];
+  const dots = pts.map((p) =>
+    `<circle class="spark-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6"><title>${p.date}: ${p.count} discovered</title></circle>`
+  ).join('');
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Opportunities discovered per day, last 14 days">
+    <path class="spark-area" d="${area}"></path>
+    <path class="spark-line" d="${line}"></path>
+    ${dots}
+    <circle class="spark-end" cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3.5"></circle>
+  </svg>`;
+}
+
 const json = JSON.stringify(items).replace(/</g, '\\u003c');
 
-const html = `<title>FundRadar EA — Live Opportunities</title>
+const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
 <style>
   :root {
-    --paper: #FAFAF7; --ink: #182420; --muted: #5C6B64; --line: #E2E6E0;
-    --panel: #F1F3EE; --accent: #0F7A5C; --accent-ink: #fff;
-    --warn: #B26A00; --crit: #B3341D; --chip: #E8EDE8;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+    --paper: #F5F3EC; --surface: #FFFFFF; --surface2: #FBFAF5; --ink: #15181C;
+    --muted: #5B6470; --line: #DEDACD; --chip: #ECE8DC;
+    --signal: #146675; --signal-ink: #FFFFFF;
+    --good: #3F7A3F; --warn: #9C6B12; --crit: #A23B2E;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #101714; --ink: #E6ECE7; --muted: #8FA098; --line: #24312B;
-      --panel: #16201B; --accent: #3FBE93; --accent-ink: #0B120F;
-      --warn: #E0A33B; --crit: #E76A50; --chip: #1E2A24;
+      --paper: #0C1013; --surface: #12171C; --surface2: #161C22; --ink: #E8ECEF;
+      --muted: #8B97A3; --line: #212A31; --chip: #1B2329;
+      --signal: #49C7D6; --signal-ink: #08252A;
+      --good: #8FCB6B; --warn: #E3A73B; --crit: #E8705A;
     }
   }
   :root[data-theme="light"] {
-    --paper: #FAFAF7; --ink: #182420; --muted: #5C6B64; --line: #E2E6E0;
-    --panel: #F1F3EE; --accent: #0F7A5C; --accent-ink: #fff;
-    --warn: #B26A00; --crit: #B3341D; --chip: #E8EDE8;
+    --paper: #F5F3EC; --surface: #FFFFFF; --surface2: #FBFAF5; --ink: #15181C;
+    --muted: #5B6470; --line: #DEDACD; --chip: #ECE8DC;
+    --signal: #146675; --signal-ink: #FFFFFF;
+    --good: #3F7A3F; --warn: #9C6B12; --crit: #A23B2E;
   }
   :root[data-theme="dark"] {
-    --paper: #101714; --ink: #E6ECE7; --muted: #8FA098; --line: #24312B;
-    --panel: #16201B; --accent: #3FBE93; --accent-ink: #0B120F;
-    --warn: #E0A33B; --crit: #E76A50; --chip: #1E2A24;
+    --paper: #0C1013; --surface: #12171C; --surface2: #161C22; --ink: #E8ECEF;
+    --muted: #8B97A3; --line: #212A31; --chip: #1B2329;
+    --signal: #49C7D6; --signal-ink: #08252A;
+    --good: #8FCB6B; --warn: #E3A73B; --crit: #E8705A;
   }
-  body { background: var(--paper); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); margin: 0; }
   a { color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 26px 20px 70px; }
 
-  header.mast { border-bottom: 3px solid var(--ink); padding-bottom: 14px; margin-bottom: 18px; }
-  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .wordmark { font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
-    font-size: 34px; font-weight: 700; letter-spacing: -0.5px; margin: 0; }
-  .wordmark .ea { color: var(--accent); }
-  .tagline { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; }
-  .statline { display: flex; gap: 26px; margin-top: 14px; flex-wrap: wrap; }
-  .stat { display: flex; flex-direction: column; gap: 1px; }
-  .stat b { font: 600 20px/1.2 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+  /* ---------- masthead ---------- */
+  header.mast { border-bottom: 3px solid var(--ink); padding-bottom: 18px; margin-bottom: 18px; }
+  .mast-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 8px; }
+  .wordmark { font-family: var(--serif); font-size: 32px; font-weight: 700; letter-spacing: -0.4px; margin: 0; }
+  .wordmark .signal-text { color: var(--signal); }
+  .tagline { color: var(--muted); font-size: 13px; max-width: 46ch; margin: 6px 0 0; }
+  .theme-toggle { background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+    width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; flex-shrink: 0; }
+  .theme-toggle:hover { border-color: var(--signal); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
 
-  .note { background: var(--panel); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 0 0 22px; font-size: 14px; }
-  .note b { font-family: "Iowan Old Style", Palatino, Georgia, serif; }
+  .mast-bottom { display: flex; align-items: center; gap: 30px; margin-top: 18px; flex-wrap: wrap; }
+  .hero { display: flex; flex-direction: column; gap: 0; }
+  .hero-num { font: 700 46px/1 var(--mono); letter-spacing: -1px; }
+  .hero-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.9px; margin-top: 4px; }
+  .stat-strip { display: flex; gap: 24px; }
+  .stat { display: flex; flex-direction: column; }
+  .stat b { font: 600 19px var(--mono); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
+  .spark-wrap { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .spark-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+  .spark { display: block; }
+  .spark-area { fill: var(--signal); opacity: 0.14; }
+  .spark-line { fill: none; stroke: var(--signal); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .spark-dot { fill: var(--signal); opacity: 0; }
+  .spark-dot:hover, .spark-dot:focus { opacity: 0.25; }
+  .spark-end { fill: var(--signal); stroke: var(--paper); stroke-width: 2; }
 
-  .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; position: sticky; top: 0;
-    background: var(--paper); padding: 12px 0 10px; z-index: 5; border-bottom: 1px solid var(--line); }
-  .row1 { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  input[type=search] { flex: 1; min-width: 220px; background: var(--panel); color: var(--ink);
-    border: 1px solid var(--line); border-radius: 3px; padding: 8px 12px; font: inherit; }
-  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* ---------- closing-soon rail ---------- */
+  .rail-head { display: flex; align-items: baseline; justify-content: space-between; margin: 22px 0 8px; }
+  .eyebrow { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted); margin: 0; }
+  .eyebrow .crit-dot { color: var(--crit); }
+  .rail { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 14px; scroll-snap-type: x proximity; }
+  .rail-card { scroll-snap-align: start; flex: 0 0 208px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 7px; padding: 11px 13px; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
+  .rail-card:hover { border-color: var(--crit); }
+  .rail-days { font: 700 20px var(--mono); color: var(--crit); font-variant-numeric: tabular-nums; }
+  .rail-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .rail-meta { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rail-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+
+  /* ---------- brief ---------- */
+  .brief { background: var(--surface); border-left: 3px solid var(--signal); border-radius: 0 6px 6px 0;
+    padding: 13px 16px; margin: 20px 0 22px; max-width: 74ch; }
+  .brief .eyebrow { margin-bottom: 6px; }
+  .brief p { font-size: 13.5px; margin: 0; }
+
+  /* ---------- controls ---------- */
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; position: sticky; top: 0;
+    background: var(--paper); padding: 10px 0; z-index: 5; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  input[type=search] { flex: 1; min-width: 200px; background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 5px; padding: 8px 12px; font: inherit; }
+  input[type=search]:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  select { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 5px;
+    padding: 7px 10px; font: 600 12.5px var(--sans); cursor: pointer; }
+  select:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
   .tabs { display: flex; gap: 2px; }
-  .tabs button { background: none; border: 1px solid var(--line); color: var(--muted); padding: 7px 13px;
-    font: 600 12.5px system-ui, sans-serif; cursor: pointer; letter-spacing: 0.3px; }
-  .tabs button:first-child { border-radius: 3px 0 0 3px; }
-  .tabs button:last-child { border-radius: 0 3px 3px 0; }
+  .tabs button { background: var(--surface); border: 1px solid var(--line); color: var(--muted); padding: 7px 13px;
+    font: 600 12.5px var(--sans); cursor: pointer; letter-spacing: 0.3px; }
+  .tabs button:first-child { border-radius: 5px 0 0 5px; }
+  .tabs button:last-child { border-radius: 0 5px 5px 0; }
+  .tabs button + button { border-left: none; }
   .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tabs button:focus-visible, .toggle:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .toggle { background: var(--surface); border: 1px solid var(--line); color: var(--muted); border-radius: 5px;
+    padding: 7px 13px; font: 600 12.5px var(--sans); cursor: pointer; }
+  .toggle[aria-pressed="true"] { background: var(--signal); color: var(--signal-ink); border-color: var(--signal); }
+
+  /* ---------- board: sidebar + results ---------- */
+  .board { display: grid; grid-template-columns: 226px 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 860px) { .board { grid-template-columns: 1fr; } }
+  aside.sidebar { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 66px; }
+  @media (max-width: 860px) { aside.sidebar { position: static; } }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 13px; }
+  .panel h2 { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: 1.3px; color: var(--muted); margin: 0 0 10px; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .chips button { background: var(--chip); border: none; color: var(--ink); border-radius: 20px;
-    padding: 4px 12px; font: 500 12.5px system-ui, sans-serif; cursor: pointer; }
-  .chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-  .chips button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .count { color: var(--muted); font-size: 12.5px; margin: 10px 2px; }
+    padding: 4px 11px; font: 500 12px var(--sans); cursor: pointer; }
+  .chips button[aria-pressed="true"] { background: var(--signal); color: var(--signal-ink); }
+  .chips button:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
 
-  ul.list { list-style: none; margin: 0; padding: 0; }
-  .list li { display: flex; gap: 18px; justify-content: space-between; align-items: flex-start;
-    padding: 14px 2px; border-bottom: 1px solid var(--line); }
-  .main { min-width: 0; }
-  .title { font-weight: 600; text-decoration: none; }
-  .title:hover, .title:focus { color: var(--accent); text-decoration: underline; }
-  .meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
-  .meta .amt { color: var(--accent); font-weight: 600; }
-  .tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
-  .tag { background: var(--chip); border-radius: 2px; padding: 1.5px 7px; font-size: 11px; color: var(--muted); }
-  .tag.type { color: var(--ink); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-  .when { text-align: right; flex-shrink: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-variant-numeric: tabular-nums; }
-  .when .date { font-size: 13px; font-weight: 600; }
-  .when .left { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-  .when.warn .date, .when.warn .left { color: var(--warn); }
-  .when.crit .date, .when.crit .left { color: var(--crit); }
-  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  .sbar-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 9px; }
+  .sbar-row:last-child { margin-bottom: 0; }
+  .sbar-btn { background: none; border: none; padding: 0; margin: 0; width: 100%; text-align: left; cursor: pointer; color: inherit; }
+  .sbar-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sbar-row[aria-pressed="true"] .sbar-label { color: var(--signal); }
+  .sbar-track { display: flex; align-items: center; gap: 7px; height: 13px; }
+  .sbar-fill { height: 9px; background: var(--signal); border-radius: 0 4px 4px 0; min-width: 3px; }
+  .sbar-row[data-other="1"] .sbar-fill { background: var(--muted); opacity: 0.5; }
+  .sbar-val { font: 600 11.5px var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
-  footer { margin-top: 34px; padding-top: 14px; border-top: 3px solid var(--ink); color: var(--muted); font-size: 12.5px; }
-  footer b { color: var(--ink); }
+  main.results { display: flex; flex-direction: column; min-width: 0; }
+  .count { color: var(--muted); font-size: 12.5px; margin: 0 2px 8px; }
+  .count b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .viewport { border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+    overflow-y: auto; height: min(72vh, 760px); position: relative; }
+  .sizer { position: relative; }
+  .pool { position: absolute; top: 0; left: 0; right: 0; }
+  .row { display: flex; align-items: center; gap: 12px; height: 76px; padding: 0 14px;
+    border-bottom: 1px solid var(--line); box-sizing: border-box; }
+  .row:hover { background: var(--surface2); }
+  .star { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--line); flex-shrink: 0;
+    width: 20px; padding: 0; line-height: 1; }
+  .star.active { color: var(--signal); }
+  .star:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .row-title-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .row-title { font-weight: 600; font-size: 14px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-title:hover, .row-title:focus { color: var(--signal); text-decoration: underline; }
+  .badge-new { font: 700 9.5px var(--sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--good);
+    border: 1px solid var(--good); border-radius: 3px; padding: 1px 5px; flex-shrink: 0; }
+  .row-meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-meta .amt { color: var(--signal); font-weight: 600; }
+  .tag-type { font: 600 10px var(--sans); text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink);
+    background: var(--chip); border-radius: 3px; padding: 1px 6px; margin-right: 6px; }
+  .row-when { text-align: right; flex-shrink: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; width: 96px; }
+  .row-when .rdate { display: block; font-size: 11.5px; color: var(--muted); }
+  .row-when .rleft { display: block; font-size: 14px; font-weight: 700; margin-top: 1px; }
+  .row-when.warn .rleft { color: var(--warn); }
+  .row-when.crit .rleft, .row-when.crit .rdate { color: var(--crit); }
+  .empty { color: var(--muted); padding: 60px 0; text-align: center; }
+
+  /* ---------- footer / ledger ---------- */
+  footer { margin-top: 30px; padding-top: 16px; border-top: 3px solid var(--ink); }
+  .ledger-head { margin: 0 0 10px; }
+  .ledger-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 20px; margin-bottom: 18px; }
+  .ledger-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; border-bottom: 1px dotted var(--line); padding-bottom: 4px; }
+  .lg-name { color: var(--ink); font-weight: 600; }
+  .lg-meta { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; flex-shrink: 0; }
+  .fine { color: var(--muted); font-size: 12.5px; max-width: 74ch; }
+  .fine b { color: var(--ink); }
+
   @media (prefers-reduced-motion: no-preference) {
-    .list li { animation: rise .25s ease both; }
-    @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    .row { animation: rise .18s ease both; }
+    @keyframes rise { from { opacity: 0; } to { opacity: 1; } }
   }
 </style>
 <div class="wrap">
   <header class="mast">
-    <div class="brand">
-      <h1 class="wordmark">FundRadar<span class="ea">·EA</span></h1>
-      <span class="tagline">East Africa Funding Intelligence</span>
+    <div class="mast-top">
+      <div>
+        <div class="brand">
+          <h1 class="wordmark">FundRadar<span class="signal-text">·EA</span></h1>
+        </div>
+        <p class="tagline">Signals intelligence for East African funding — every open grant, tender and call, watched daily so you don't have to.</p>
+      </div>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle color theme" title="Toggle color theme">&#9680;</button>
     </div>
-    <div class="statline">
-      <div class="stat"><b id="statLive">${items.length}</b><span>Live opportunities</span></div>
-      <div class="stat"><b>${nSources}</b><span>Sources monitored</span></div>
-      <div class="stat"><b>${nTotal}</b><span>Tracked total</span></div>
-      <div class="stat"><b>${today}</b><span>Issue №1</span></div>
+    <div class="mast-bottom">
+      <div class="hero"><b class="hero-num" id="statLive">${items.length}</b><span class="hero-label">Live opportunities</span></div>
+      <div class="stat-strip">
+        <div class="stat"><b>${nSources}</b><span>Sources watched</span></div>
+        <div class="stat"><b>${nTotal.toLocaleString()}</b><span>Ever tracked</span></div>
+        <div class="stat"><b>${today}</b><span>Last swept</span></div>
+      </div>
+      <div class="spark-wrap">
+        <span class="spark-label">New discoveries · 14 days</span>
+        ${sparklineSvg(daily)}
+      </div>
     </div>
   </header>
 
-  <p class="note"><b>Editor's note —</b> The money didn't disappear this year; the <em>map</em> did.
-  With USAID gone and several European donors cutting budgets, what remains is scattered across portals
-  nobody has time to check. We check them. Every deadline below links to its primary source.</p>
+  <div class="rail-head">
+    <p class="eyebrow"><span class="crit-dot">&#9679;</span> Closing within 7 days</p>
+  </div>
+  <div class="rail" id="rail"></div>
+
+  <div class="brief">
+    <p class="eyebrow">Situation brief</p>
+    <p>The money didn't disappear this year; the <em>map</em> did. With USAID gone and several European donors
+    cutting budgets, what remains is scattered across portals nobody has time to check. We check them —
+    government e-procurement systems, multilateral tender platforms, and web-wide discovery feeds — every day.
+    Every deadline below links to its primary source.</p>
+  </div>
 
   <div class="controls">
-    <div class="row1">
-      <input type="search" id="q" placeholder="Search title, funder, sector…" aria-label="Search opportunities">
-      <div class="tabs" role="group" aria-label="Filter by type">
-        <button data-type="all" aria-pressed="true">All</button>
-        <button data-type="grant" aria-pressed="false">Grants</button>
-        <button data-type="tender" aria-pressed="false">Tenders</button>
-        <button data-type="fellowship" aria-pressed="false">Fellowships</button>
-      </div>
+    <input type="search" id="q" placeholder="Search title, funder, sector… (press / to focus)" aria-label="Search opportunities">
+    <div class="tabs" role="group" aria-label="Filter by type">
+      <button data-type="all" aria-pressed="true">All</button>
+      <button data-type="grant" aria-pressed="false">Grants</button>
+      <button data-type="tender" aria-pressed="false">Tenders</button>
+      <button data-type="fellowship" aria-pressed="false">Fellowships</button>
     </div>
-    <div class="chips" id="chips" role="group" aria-label="Filter by country"></div>
+    <select id="sort" aria-label="Sort order">
+      <option value="deadline_asc">Deadline · soonest</option>
+      <option value="deadline_desc">Deadline · latest</option>
+      <option value="new_desc">Newest discovered</option>
+    </select>
+    <button class="toggle" id="shortlistToggle" aria-pressed="false">&#9734; Shortlist (<span id="shortlistCount">0</span>)</button>
   </div>
-  <p class="count" id="count"></p>
-  <ul class="list" id="list"></ul>
+
+  <div class="board">
+    <aside class="sidebar">
+      <div class="panel">
+        <h2>Country</h2>
+        <div class="chips" id="countryChips"></div>
+      </div>
+      <div class="panel">
+        <h2>Sector (live)</h2>
+        <div id="sectorChart"></div>
+      </div>
+    </aside>
+    <main class="results">
+      <p class="count" id="count"></p>
+      <div class="viewport" id="viewport" tabindex="0">
+        <div class="sizer" id="sizer">
+          <div class="pool" id="pool" role="list" aria-label="Opportunities"></div>
+        </div>
+      </div>
+    </main>
+  </div>
 
   <footer>
-    <b>How this works:</b> FundRadar monitors World Bank procurement, the EU Funding &amp; Tenders portal,
-    UNGM and other primary sources daily. Sector and eligibility tags are automated; deadlines are taken from
-    structured source data where available. <b>Always verify against the linked source before applying.</b>
-    Spotted an error? Tell us — corrections ship within 24 hours.
+    <p class="eyebrow ledger-head">Source ledger — last confirmed check</p>
+    <div class="ledger-grid">
+      ${sourceMeta.map((s) => `<div class="ledger-row"><span class="lg-name">${s.source}</span><span class="lg-meta">${s.total} tracked · ${s.latest.slice(0, 16).replace('T', ' ')}</span></div>`).join('')}
+    </div>
+    <p class="fine">FundRadar monitors government e-procurement portals, multilateral tender systems and web-wide
+    discovery feeds daily. Sector and eligibility tags are automated; deadlines come from structured source data
+    where available. <b>Always verify against the linked source before applying.</b> Spotted an error?
+    Corrections ship within 24 hours.</p>
   </footer>
 </div>
+<script>var BUILD_DATE = "${today}";</script>
 <script type="application/json" id="data">${json}</script>
 <script>
-  const DATA = JSON.parse(document.getElementById('data').textContent);
-  const list = document.getElementById('list');
-  const q = document.getElementById('q');
-  const chipsEl = document.getElementById('chips');
-  const countEl = document.getElementById('count');
-  let type = 'all', country = 'all', query = '';
+(function () {
+  var DATA = JSON.parse(document.getElementById('data').textContent);
+  var q = document.getElementById('q');
+  var sortSel = document.getElementById('sort');
+  var shortlistBtn = document.getElementById('shortlistToggle');
+  var shortlistCountEl = document.getElementById('shortlistCount');
+  var countryChipsEl = document.getElementById('countryChips');
+  var sectorChartEl = document.getElementById('sectorChart');
+  var countEl = document.getElementById('count');
+  var railEl = document.getElementById('rail');
+  var viewport = document.getElementById('viewport');
+  var sizer = document.getElementById('sizer');
+  var pool = document.getElementById('pool');
+  var themeToggle = document.getElementById('themeToggle');
 
-  const countryCounts = {};
-  DATA.forEach(o => o.c.forEach(c => { const n = c.split(',')[0]; countryCounts[n] = (countryCounts[n] || 0) + 1; }));
-  const countries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]);
-  chipsEl.innerHTML = '<button data-c="all" aria-pressed="true">All countries</button>' +
-    countries.map(([c, n]) => '<button data-c="' + c + '" aria-pressed="false">' + c + ' (' + n + ')</button>').join('') +
+  var esc = function (s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+
+  var ROW_H = 76, OVERSCAN = 6;
+  var state = { type: 'all', country: 'all', sector: 'all', query: '', sort: 'deadline_asc', shortlistOnly: false };
+  var current = [];
+
+  // ---------- shortlist (localStorage) ----------
+  var shortlist;
+  try { shortlist = new Set(JSON.parse(localStorage.getItem('fundradar_shortlist') || '[]')); }
+  catch (e) { shortlist = new Set(); }
+  function saveShortlist() {
+    try { localStorage.setItem('fundradar_shortlist', JSON.stringify(Array.from(shortlist))); } catch (e) {}
+    shortlistCountEl.textContent = shortlist.size;
+  }
+  saveShortlist();
+
+  // ---------- theme toggle ----------
+  var storedTheme = null;
+  try { storedTheme = localStorage.getItem('fundradar_theme'); } catch (e) {}
+  if (storedTheme) document.documentElement.setAttribute('data-theme', storedTheme);
+  themeToggle.addEventListener('click', function () {
+    var mql = window.matchMedia('(prefers-color-scheme: dark)');
+    var current = document.documentElement.getAttribute('data-theme') || (mql.matches ? 'dark' : 'light');
+    var next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('fundradar_theme', next); } catch (e) {}
+  });
+
+  // ---------- date math ----------
+  var TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
+  function daysLeft(d) { return Math.round((new Date(d + 'T00:00:00') - TODAY) / 86400000); }
+
+  // ---------- facets (country / sector), computed once from the live dataset ----------
+  var countryCounts = {};
+  DATA.forEach(function (o) { o.c.forEach(function (c) { var n = c.split(',')[0]; countryCounts[n] = (countryCounts[n] || 0) + 1; }); });
+  var countryEntries = Object.entries(countryCounts).sort(function (a, b) { return b[1] - a[1]; });
+  countryChipsEl.innerHTML = '<button data-c="all" aria-pressed="true">All</button>' +
+    countryEntries.map(function (e) { return '<button data-c="' + esc(e[0]) + '" aria-pressed="false">' + esc(e[0]) + ' (' + e[1] + ')</button>'; }).join('') +
     '<button data-c="regional" aria-pressed="false">Regional / Global</button>';
 
-  const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
-  function daysLeft(d) { return Math.round((new Date(d + 'T00:00:00') - TODAY) / 86400000); }
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  var sectorCounts = {};
+  DATA.forEach(function (o) { o.k.forEach(function (k) { sectorCounts[k] = (sectorCounts[k] || 0) + 1; }); });
+  var sectorEntries = Object.entries(sectorCounts).sort(function (a, b) { return b[1] - a[1]; });
+  var TOP_N = 7;
+  var sectorTop = sectorEntries.slice(0, TOP_N);
+  var sectorRest = sectorEntries.slice(TOP_N).reduce(function (s, e) { return s + e[1]; }, 0);
+  var maxSector = Math.max(1, sectorTop.length ? sectorTop[0][1] : 1, sectorRest);
+  var sectorHtml = sectorTop.map(function (e) {
+    var pct = Math.max(6, Math.round((e[1] / maxSector) * 100));
+    return '<div class="sbar-row" data-sector="' + esc(e[0]) + '" aria-pressed="false">' +
+      '<button class="sbar-btn" type="button">' +
+      '<span class="sbar-label">' + esc(e[0]) + '</span>' +
+      '<span class="sbar-track"><span class="sbar-fill" style="width:' + pct + '%"></span><span class="sbar-val">' + e[1] + '</span></span>' +
+      '</button></div>';
+  }).join('');
+  if (sectorRest > 0) {
+    var pctO = Math.max(6, Math.round((sectorRest / maxSector) * 100));
+    sectorHtml += '<div class="sbar-row" data-other="1"><span class="sbar-label">Other</span>' +
+      '<span class="sbar-track"><span class="sbar-fill" style="width:' + pctO + '%"></span><span class="sbar-val">' + sectorRest + '</span></span></div>';
+  }
+  sectorChartEl.innerHTML = sectorHtml;
 
-  function render() {
-    const out = DATA.filter(o => {
-      if (type !== 'all' && o.y !== type) return false;
-      if (country === 'regional' && o.c.length > 0) return false;
-      if (country !== 'all' && country !== 'regional' && !o.c.some(c => c.startsWith(country))) return false;
-      if (query) {
-        const hay = (o.t + ' ' + o.f + ' ' + o.s + ' ' + o.k.join(' ') + ' ' + o.c.join(' ')).toLowerCase();
-        if (!query.toLowerCase().split(/\\s+/).every(w => hay.includes(w))) return false;
-      }
-      return true;
-    });
-    countEl.textContent = out.length + ' of ' + DATA.length + ' live opportunities';
-    if (!out.length) { list.innerHTML = '<li class="empty">Nothing matches — widen the filters.</li>'; return; }
-    list.innerHTML = out.map(o => {
-      let when = '<span class="date">no date</span><span class="left">see source</span>', cls = '';
-      if (o.d) {
-        const dl = daysLeft(o.d);
-        cls = dl <= 7 ? ' crit' : dl <= 21 ? ' warn' : '';
-        when = '<span class="date">' + o.d + '</span><span class="left">' + (dl === 0 ? 'closes today' : dl + ' days left') + '</span>';
-      }
-      const meta = [o.f, o.c.map(c => c.split(',')[0]).join(', ')].filter(Boolean).join(' · ');
-      return '<li><div class="main">' +
-        '<a class="title" href="' + esc(o.u) + '" target="_blank" rel="noopener">' + esc(o.t) + '</a>' +
-        '<div class="meta">' + esc(meta) + (o.a ? ' · <span class="amt">' + esc(o.a) + '</span>' : '') + ' · via ' + esc(o.s) + '</div>' +
-        '<div class="tags"><span class="tag type">' + o.y + '</span>' + o.k.slice(0, 4).map(k => '<span class="tag">' + esc(k) + '</span>').join('') + '</div>' +
-        '</div><div class="when' + cls + '">' + when + '</div></li>';
+  // ---------- closing-soon rail (static, computed once) ----------
+  var closing = DATA.filter(function (o) { return o.d && daysLeft(o.d) >= 0 && daysLeft(o.d) <= 7; })
+    .sort(function (a, b) { return daysLeft(a.d) - daysLeft(b.d); }).slice(0, 14);
+  if (closing.length) {
+    railEl.innerHTML = closing.map(function (o) {
+      var dl = daysLeft(o.d);
+      return '<a class="rail-card" href="' + esc(o.u) + '" target="_blank" rel="noopener">' +
+        '<span class="rail-days">' + (dl === 0 ? 'today' : dl + 'd') + '</span>' +
+        '<span class="rail-title">' + esc(o.t) + '</span>' +
+        '<span class="rail-meta">' + esc(o.f || o.s) + '</span></a>';
     }).join('');
+  } else {
+    var soonest = DATA.filter(function (o) { return o.d; }).sort(function (a, b) { return daysLeft(a.d) - daysLeft(b.d); })[0];
+    railEl.outerHTML = '<p class="rail-empty">Nothing closing within 7 days right now' +
+      (soonest ? ' — the nearest deadline is in ' + daysLeft(soonest.d) + ' days.' : '.') + '</p>';
   }
 
-  q.addEventListener('input', () => { query = q.value.trim(); render(); });
-  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
-    type = b.dataset.type;
-    document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
-    render();
-  }));
-  chipsEl.addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b) return;
-    country = b.dataset.c;
-    chipsEl.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
-    render();
+  // ---------- filter + sort ----------
+  function matches(o) {
+    if (state.type !== 'all' && o.y !== state.type) return false;
+    if (state.country === 'regional' && o.c.length > 0) return false;
+    if (state.country !== 'all' && state.country !== 'regional' && !o.c.some(function (c) { return c.indexOf(state.country) === 0; })) return false;
+    if (state.sector !== 'all' && o.k.indexOf(state.sector) === -1) return false;
+    if (state.shortlistOnly && !shortlist.has(o.id)) return false;
+    if (state.query) {
+      var hay = (o.t + ' ' + o.f + ' ' + o.s + ' ' + o.k.join(' ') + ' ' + o.c.join(' ')).toLowerCase();
+      var words = state.query.toLowerCase().split(/\s+/);
+      for (var i = 0; i < words.length; i++) { if (hay.indexOf(words[i]) === -1) return false; }
+    }
+    return true;
+  }
+  function sortFn(a, b) {
+    if (state.sort === 'new_desc') return a.n < b.n ? 1 : a.n > b.n ? -1 : 0;
+    var ad = a.d || '9999', bd = b.d || '9999';
+    return state.sort === 'deadline_desc' ? (ad < bd ? 1 : ad > bd ? -1 : 0) : (ad < bd ? -1 : ad > bd ? 1 : 0);
+  }
+
+  function rowHtml(o, idx) {
+    var when = '<span class="rdate">no date</span><span class="rleft">see source</span>', cls = '';
+    if (o.d) {
+      var dl = daysLeft(o.d);
+      cls = dl <= 7 ? ' crit' : dl <= 21 ? ' warn' : '';
+      when = '<span class="rdate">' + o.d + '</span><span class="rleft">' + (dl <= 0 ? 'today' : dl + 'd left') + '</span>';
+    }
+    var meta = [o.f, o.c.map(function (c) { return c.split(',')[0]; }).join(', '), o.k[0]].filter(Boolean).join(' · ');
+    var isNew = o.n === BUILD_DATE;
+    var starred = shortlist.has(o.id);
+    return '<div class="row" role="listitem" aria-posinset="' + (idx + 1) + '" aria-setsize="' + current.length + '">' +
+      '<button class="star' + (starred ? ' active' : '') + '" data-id="' + esc(o.id) + '" aria-pressed="' + starred + '" aria-label="Add to shortlist">' + (starred ? '★' : '☆') + '</button>' +
+      '<div class="row-main">' +
+        '<div class="row-title-line"><span class="tag-type">' + o.y + '</span>' +
+        '<a class="row-title" href="' + esc(o.u) + '" target="_blank" rel="noopener" title="' + esc(o.t) + '">' + esc(o.t) + '</a>' +
+        (isNew ? '<span class="badge-new">New</span>' : '') + '</div>' +
+        '<div class="row-meta" title="' + esc(meta + ' · via ' + o.s) + '">' + esc(meta) + (o.a ? ' · <span class="amt">' + esc(o.a) + '</span>' : '') + ' · via ' + esc(o.s) + '</div>' +
+      '</div>' +
+      '<div class="row-when' + cls + '">' + when + '</div>' +
+    '</div>';
+  }
+
+  function renderWindow() {
+    if (!current.length) {
+      sizer.style.height = '0px';
+      pool.style.transform = 'none';
+      pool.innerHTML = '<p class="empty">Nothing matches — widen the filters.</p>';
+      return;
+    }
+    sizer.style.height = (current.length * ROW_H) + 'px';
+    var scrollTop = viewport.scrollTop, viewH = viewport.clientHeight || 600;
+    var start = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+    var end = Math.min(current.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
+    pool.style.transform = 'translateY(' + (start * ROW_H) + 'px)';
+    var html = '';
+    for (var i = start; i < end; i++) html += rowHtml(current[i], i);
+    pool.innerHTML = html;
+  }
+
+  function refilter() {
+    current = DATA.filter(matches).sort(sortFn);
+    countEl.innerHTML = '<b>' + current.length + '</b> of ' + DATA.length + ' live opportunities';
+    viewport.scrollTop = 0;
+    renderWindow();
+  }
+
+  // ---------- wiring ----------
+  var searchTimer;
+  q.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { state.query = q.value.trim(); refilter(); }, 140);
   });
-  render();
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.type = b.dataset.type;
+      document.querySelectorAll('.tabs button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      refilter();
+    });
+  });
+  sortSel.addEventListener('change', function () { state.sort = sortSel.value; refilter(); });
+  shortlistBtn.addEventListener('click', function () {
+    state.shortlistOnly = !state.shortlistOnly;
+    shortlistBtn.setAttribute('aria-pressed', state.shortlistOnly);
+    refilter();
+  });
+  countryChipsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    state.country = b.dataset.c;
+    countryChipsEl.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+    refilter();
+  });
+  sectorChartEl.addEventListener('click', function (e) {
+    var row = e.target.closest('.sbar-row'); if (!row || row.dataset.other) return;
+    var sector = row.dataset.sector;
+    var already = row.getAttribute('aria-pressed') === 'true';
+    sectorChartEl.querySelectorAll('.sbar-row').forEach(function (r) { r.setAttribute('aria-pressed', 'false'); });
+    state.sector = already ? 'all' : sector;
+    if (!already) row.setAttribute('aria-pressed', 'true');
+    refilter();
+  });
+  pool.addEventListener('click', function (e) {
+    var star = e.target.closest('.star'); if (!star) return;
+    var id = star.dataset.id;
+    if (shortlist.has(id)) shortlist.delete(id); else shortlist.add(id);
+    saveShortlist();
+    renderWindow();
+  });
+  var ticking = false;
+  viewport.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { renderWindow(); ticking = false; });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/') return;
+    var t = document.activeElement, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault(); q.focus();
+  });
+
+  refilter();
+})();
 </script>
 `;
 
@@ -233,6 +577,7 @@ const fullDoc = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="FundRadar EA — every open grant, tender and opportunity relevant to East African organizations, tracked from primary sources and updated daily.">
+<meta name="theme-color" content="#146675">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
 ${html.slice(0, styleEnd)}
 </head>
