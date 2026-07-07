@@ -10,6 +10,7 @@ import { fetchUgandaEgp } from './sources/uganda_egp.js';
 import { fetchKenyaTenders } from './sources/kenya_tenders.js';
 import { fetchWebRadar } from './sources/webradar.js';
 import { fetchAecf } from './sources/aecf.js';
+import { fetchReliefWeb } from './sources/reliefweb.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SUMMARY_PATH = process.env.SUMMARY_PATH || path.join(ROOT, '.run-summary.json');
@@ -25,6 +26,7 @@ const SOURCES = [
   ['Kenya PPIP', fetchKenyaTenders],
   ['Web Radar', fetchWebRadar],
   ['AECF (Africa Enterprise Challenge Fund)', fetchAecf],
+  ['ReliefWeb', fetchReliefWeb],
 ];
 
 const db = openDb();
