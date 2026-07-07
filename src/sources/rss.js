@@ -71,56 +71,58 @@ export async function fetchFundsForNgos() {
 export async function fetchOpportunityDesk() {
   const SOURCE = 'Opportunity Desk';
   const out = [];
-  // RSS feed returns 403 — use the WordPress REST API instead
-  const url = 'https://opportunitydesk.org/wp-json/wp/v2/posts?per_page=20&_fields=id,title,link,excerpt,date';
+  // Both /feed/ (RSS) and /wp-json/ (REST API) return 403 — scrape HTML directly
+  const url = 'https://opportunitydesk.org/';
   const res = await fetchRetry(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FundRadar/0.1)' },
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+    },
   });
   if (!res.ok) throw new Error(`${url} HTTP ${res.status}`);
-  const posts = await res.json();
+  const html = await res.text();
 
-  for (const post of posts) {
-    const title = stripHtml(post.title?.rendered ?? '');
-    const link = post.link ?? '';
-    if (!title || !link) continue;
+  // Extract article blocks: each post has an <h2> or <h3> with an <a href> inside, followed by excerpt text
+  const articleRe = /<h[23][^>]*>\s*<a\s+href="(https:\/\/opportunitydesk\.org\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const deadlineRe = /Deadline:\s*([A-Za-z]+ \d{1,2},\s*\d{4})/;
+  const seen = new Set();
+  let match;
 
-    const excerptRaw = stripHtml(post.excerpt?.rendered ?? '').slice(0, 1200);
+  while ((match = articleRe.exec(html)) !== null) {
+    const link = match[1];
+    const rawTitle = stripHtml(match[2]);
+    if (!rawTitle || !link || seen.has(link)) continue;
+    seen.add(link);
 
-    // Extract deadline from excerpt text: "Deadline: Month DD, YYYY" or "Deadline: Unspecified"
+    // Grab a short window of text after the title for deadline/summary
+    const afterTitle = stripHtml(html.slice(match.index, match.index + 800)).slice(0, 600);
     let deadline = null;
-    const dlMatch = excerptRaw.match(/Deadline:\s*([A-Za-z]+ \d{1,2},\s*\d{4})/);
+    const dlMatch = afterTitle.match(deadlineRe);
     if (dlMatch) {
       const d = new Date(dlMatch[1]);
       if (!isNaN(d.getTime())) deadline = d.toISOString().slice(0, 10);
     }
-
-    // Strip the "Deadline: ..." prefix from summary
-    const summary = excerptRaw.replace(/^Deadline:\s*[^\n]+\n?/, '').trim();
+    const summary = afterTitle.replace(deadlineRe, '').replace(rawTitle, '').trim().slice(0, 400);
 
     let type = 'fellowship';
-    const t = `${title} ${summary}`.toLowerCase();
+    const t = `${rawTitle} ${summary}`.toLowerCase();
     if (/\baward\b|\bprize\b|competition|challenge/.test(t)) type = 'prize';
     else if (/tender|request for proposals|\brfp\b|procurement/.test(t)) type = 'tender';
     else if (/grant|call for proposals|funding/.test(t)) type = 'grant';
     else if (/fellowship|scholarship/.test(t)) type = 'fellowship';
 
-    let published_at = null;
-    if (post.date) {
-      const d = new Date(post.date);
-      if (!isNaN(d.getTime())) published_at = d.toISOString();
-    }
-
     const rec = enrich({
       id: makeId(SOURCE, link),
       source: SOURCE,
       funder: null,
-      title: title.slice(0, 300),
+      title: rawTitle.slice(0, 300),
       url: link,
       summary,
       type,
       deadline,
-      published_at,
-      raw: { wp_id: post.id },
+      published_at: null,
+      raw: {},
     });
     if (rec) out.push(rec);
   }
