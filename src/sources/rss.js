@@ -80,6 +80,8 @@ export async function fetchOpportunityDesk() {
       'Accept-Language': 'en-US,en;q=0.5',
     },
   });
+  // 403 is common when cloud IPs are blocked (Cloudflare); skip silently and retry next run
+  if (res.status === 403) return out;
   if (!res.ok) throw new Error(`${url} HTTP ${res.status}`);
   const html = await res.text();
 
