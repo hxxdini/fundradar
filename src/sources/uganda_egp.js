@@ -1,16 +1,15 @@
 import { makeId, enrich, stripHtml } from '../normalize.js';
 import { fetchRetry } from '../http.js';
 
-// Uganda e-Government Procurement portal (PPDA). Server-rendered tables:
-// Procuring Entity | Type/Method | Subject | Published | Deadline | Actions
+// Uganda e-Government Procurement portal (PPDA). Server-rendered tables.
+// Row structure: Reference | Type | Subject (truncated) | Published | Deadline | Actions
+// Notice URLs are absolute: https://egpuganda.go.ug/index/{id}_egp
 const BASE = 'https://egpuganda.go.ug';
-const PAGES = ['/bid-notices', '/bid-notices/consultancy', '/bid-notices/supplies', '/bid-notices/works'];
+const PAGES = ['/bid-notices', '/bid-notices/consultancy', '/bid-notices/none-consultancy', '/bid-notices/supplies', '/bid-notices/works'];
 
-// The listing tables truncate the Subject column to ~20 chars + "...". The full
-// text is on each notice's detail page under "Subject of Procurement".
 async function fetchFullSubject(noticeUrl) {
   try {
-    const res = await fetchRetry(`${BASE}${noticeUrl}`, {}, { timeoutMs: 60000 });
+    const res = await fetchRetry(noticeUrl, {}, { timeoutMs: 60000 });
     if (!res.ok) return null;
     const text = stripHtml(await res.text()).replace(/\s+/g, ' ');
     const m = text.match(/Subject of Procurement\s+([\s\S]*?)\s+Procurement Method/);
@@ -36,36 +35,44 @@ export async function fetchUgandaEgp() {
       continue;
     }
 
+    // Rows use absolute URLs: https://egpuganda.go.ug/index/{id}_egp
     for (const tr of html.split(/<tr[\s>]/).slice(1)) {
-      const noticeUrl = tr.match(/href="(\/bid\/notice\/\d+[^"]*)"/)?.[1];
-      if (!noticeUrl) continue;
-      const noticeId = noticeUrl.match(/\/notice\/(\d+)/)?.[1];
-      if (!noticeId || seen.has(noticeId)) continue;
+      // Match both relative /index/ and absolute https://egpuganda.go.ug/index/ links
+      const noticeUrl = tr.match(/href="((?:https:\/\/egpuganda\.go\.ug)?\/index\/(\d+)_egp)"/)?.[1];
+      const noticeId = tr.match(/\/index\/(\d+)_egp/)?.[1];
+      if (!noticeUrl || !noticeId || seen.has(noticeId)) continue;
 
-      const cells = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => stripHtml(m[1]));
+      const cells = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => stripHtml(m[1]).replace(/\s+/g, ' ').trim());
       if (cells.length < 4) continue;
-      // Layout varies slightly per tab; identify by content shape
-      const dates = cells.filter((c) => /^\d{4}-\d{2}-\d{2}/.test(c));
-      const entity = cells[0];
-      const subject = cells.slice(1, 4).sort((a, b) => b.length - a.length)[0] ?? '';
-      const deadline = dates.length >= 2 ? dates[1].slice(0, 10) : dates[0]?.slice(0, 10) ?? null;
+
+      // cells[0]=ref, cells[1]=type, cells[2]=subject, cells[3]=published, cells[4]=deadline
+      const subject = cells[2] ?? '';
+      const published = cells[3] ?? '';
+      const deadline = cells[4]?.slice(0, 10) ?? null;
+      const entity = cells[0] ?? '';
+      const type = cells[1] ?? '';
+
       if (!subject || subject.length < 8) continue;
       if (deadline && deadline < today) continue;
 
       seen.add(noticeId);
-      const fullSubject = subject.endsWith('...') ? await fetchFullSubject(noticeUrl) : null;
+
+      // Fetch full subject if truncated
+      const fullUrl = noticeUrl.startsWith('http') ? noticeUrl : `${BASE}${noticeUrl}`;
+      const fullSubject = subject.endsWith('...') ? await fetchFullSubject(fullUrl) : null;
 
       out.push(enrich({
         id: makeId('uganda-egp', noticeId),
         source: 'Uganda eGP (PPDA)',
-        funder: entity || 'Government of Uganda',
+        funder: 'Government of Uganda',
         title: (fullSubject || subject).slice(0, 300),
-        url: `${BASE}${noticeUrl}`,
-        summary: `${entity} — ${cells.find((c) => /bidding|tender|quotation|proposal/i.test(c)) ?? 'bid notice'}`,
+        url: fullUrl,
+        summary: `${entity} — ${type} tender`,
         type: 'tender',
         deadline,
+        published: published.slice(0, 10) || null,
         countries: ['Uganda'],
-        raw: { noticeId, cells: cells.slice(0, 6) },
+        raw: { noticeId, ref: entity, type, cells: cells.slice(0, 5) },
       }));
     }
   }
