@@ -50,17 +50,21 @@ function rssToRecord(item, { source, funder, defaultType }) {
 // fundsforNGOs — aggregator; funder is named inside each post, so funder = null (parsed later)
 export async function fetchFundsForNgos() {
   // www2 subdomain is stale (returns 1 item); www returns 25+
+  // Africa feed items are explicitly Africa-scoped → force ea_relevant on those
   const feeds = [
-    'https://www.fundsforngos.org/feed/',
-    'https://www.fundsforngos.org/feed/?cat=africa',
+    { url: 'https://www.fundsforngos.org/feed/', forceEa: false },
+    { url: 'https://www.fundsforngos.org/feed/?cat=africa', forceEa: true },
   ];
   const out = [];
-  for (const f of feeds) {
+  const seen = new Set();
+  for (const { url: f, forceEa } of feeds) {
     try {
       const items = await fetchFeed(f);
       for (const item of items) {
         const rec = rssToRecord(item, { source: 'fundsforNGOs', funder: null, defaultType: 'grant' });
-        if (rec) out.push(rec);
+        if (!rec || seen.has(rec.id)) continue;
+        seen.add(rec.id);
+        out.push(forceEa ? { ...rec, ea_relevant: 1 } : rec);
       }
     } catch (e) {
       console.error(`  ! feed failed ${f}: ${e.message}`);
