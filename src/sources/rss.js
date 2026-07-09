@@ -49,9 +49,10 @@ function rssToRecord(item, { source, funder, defaultType }) {
 
 // fundsforNGOs — aggregator; funder is named inside each post, so funder = null (parsed later)
 export async function fetchFundsForNgos() {
+  // www2 subdomain is stale (returns 1 item); www returns 25+
   const feeds = [
-    'https://www2.fundsforngos.org/feed/',
-    'https://www2.fundsforngos.org/category/africa/feed/',
+    'https://www.fundsforngos.org/feed/',
+    'https://www.fundsforngos.org/feed/?cat=africa',
   ];
   const out = [];
   for (const f of feeds) {
