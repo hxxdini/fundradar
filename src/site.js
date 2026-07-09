@@ -348,6 +348,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
       <option value="deadline_desc">Deadline · latest</option>
       <option value="new_desc">Newest discovered</option>
     </select>
+    <button class="toggle" id="newToggle" aria-pressed="false">&#10022; New (<span id="newCount">0</span>)</button>
     <button class="toggle" id="shortlistToggle" aria-pressed="false">&#9734; Shortlist (<span id="shortlistCount">0</span>)</button>
   </div>
 
@@ -388,6 +389,8 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
   var DATA = JSON.parse(document.getElementById('data').textContent);
   var q = document.getElementById('q');
   var sortSel = document.getElementById('sort');
+  var newBtn = document.getElementById('newToggle');
+  var newCountEl = document.getElementById('newCount');
   var shortlistBtn = document.getElementById('shortlistToggle');
   var shortlistCountEl = document.getElementById('shortlistCount');
   var countryChipsEl = document.getElementById('countryChips');
@@ -402,7 +405,8 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   };
 
-  var state = { type: 'all', country: 'all', sector: 'all', query: '', sort: 'deadline_asc', shortlistOnly: false };
+  var state = { type: 'all', country: 'all', sector: 'all', query: '', sort: 'deadline_asc', shortlistOnly: false, newOnly: false };
+  newCountEl.textContent = DATA.filter(function (o) { return o.n === BUILD_DATE; }).length;
   var current = [];
 
   // ---------- shortlist (localStorage) ----------
@@ -519,6 +523,7 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     if (state.country === 'regional' && o.c.length > 0) return false;
     if (state.country !== 'all' && state.country !== 'regional' && !o.c.some(function (c) { return c.indexOf(state.country) === 0; })) return false;
     if (state.sector !== 'all' && o.k.indexOf(state.sector) === -1) return false;
+    if (state.newOnly && o.n !== BUILD_DATE) return false;
     if (state.shortlistOnly && !shortlist.has(o.id)) return false;
     if (state.query) {
       var hay = (o.t + ' ' + o.f + ' ' + o.s + ' ' + o.k.join(' ') + ' ' + o.c.join(' ')).toLowerCase();
@@ -586,6 +591,11 @@ const html = `<title>FundRadar EA — Funding &amp; Tender Intelligence</title>
     });
   });
   sortSel.addEventListener('change', function () { state.sort = sortSel.value; refilter(); });
+  newBtn.addEventListener('click', function () {
+    state.newOnly = !state.newOnly;
+    newBtn.setAttribute('aria-pressed', state.newOnly);
+    refilter();
+  });
   shortlistBtn.addEventListener('click', function () {
     state.shortlistOnly = !state.shortlistOnly;
     shortlistBtn.setAttribute('aria-pressed', state.shortlistOnly);
