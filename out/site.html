@@ -112,12 +112,32 @@
   .toggle { background: var(--surface); border: 1px solid var(--line); color: var(--muted); border-radius: 5px;
     padding: 7px 13px; font: 600 12.5px var(--sans); cursor: pointer; }
   .toggle[aria-pressed="true"] { background: var(--signal); color: var(--signal-ink); border-color: var(--signal); }
+  .filter-btn { display: none; align-items: center; gap: 6px; }
+  .filter-badge { background: var(--signal); color: var(--signal-ink); border-radius: 20px; min-width: 16px;
+    height: 16px; padding: 0 4px; font: 700 10px var(--mono); display: inline-flex; align-items: center; justify-content: center; }
 
   /* ---------- board: sidebar + results ---------- */
   .board { display: grid; grid-template-columns: 226px 1fr; gap: 22px; align-items: start; }
   @media (max-width: 860px) { .board { grid-template-columns: 1fr; } }
   aside.sidebar { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 66px; }
-  @media (max-width: 860px) { aside.sidebar { position: static; } }
+  .drawer-head { display: none; }
+  .sidebar-backdrop { display: none; }
+  @media (max-width: 860px) {
+    aside.sidebar { position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; width: min(320px, 85vw);
+      background: var(--paper); margin: 0; padding: 16px; gap: 16px; overflow-y: auto;
+      transform: translateX(-100%); transition: transform .22s ease; box-shadow: 2px 0 26px rgba(0,0,0,0.28); }
+    aside.sidebar.open { transform: translateX(0); }
+    .drawer-head { display: flex; align-items: center; justify-content: space-between;
+      font: 700 12px var(--sans); text-transform: uppercase; letter-spacing: 1.3px; color: var(--muted);
+      border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 2px; }
+    .drawer-close { background: none; border: none; color: var(--ink); font-size: 26px; line-height: 1;
+      cursor: pointer; padding: 0 2px; }
+    .drawer-close:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+    .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 49; background: rgba(0,0,0,0.45);
+      opacity: 0; pointer-events: none; transition: opacity .22s ease; }
+    .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+    .filter-btn { display: inline-flex; }
+  }
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 13px; }
   .panel h2 { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: 1.3px; color: var(--muted); margin: 0 0 10px; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -275,10 +295,13 @@
     </select>
     <button class="toggle" id="newToggle" aria-pressed="false">&#10022; New (<span id="newCount">0</span>)</button>
     <button class="toggle" id="shortlistToggle" aria-pressed="false">&#9734; Shortlist (<span id="shortlistCount">0</span>)</button>
+    <button class="toggle filter-btn" id="filterBtn" aria-expanded="false" aria-controls="sidebar">&#9776; Filters<span class="filter-badge" id="filterBadge" hidden></span></button>
   </div>
 
   <div class="board">
-    <aside class="sidebar">
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="drawer-head"><span>Filters</span><button class="drawer-close" id="drawerClose" aria-label="Close filters">&times;</button></div>
       <div class="panel">
         <h2>Country</h2>
         <div class="chips" id="countryChips"></div>
@@ -325,6 +348,11 @@
   var viewport = document.getElementById('viewport');
   var pool = document.getElementById('pool');
   var themeToggle = document.getElementById('themeToggle');
+  var filterBtn = document.getElementById('filterBtn');
+  var filterBadge = document.getElementById('filterBadge');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  var drawerClose = document.getElementById('drawerClose');
 
   var esc = function (s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -355,6 +383,28 @@
     document.documentElement.setAttribute('data-theme', next);
     try { localStorage.setItem('fundradar_theme', next); } catch (e) {}
   });
+
+  // ---------- filters drawer (mobile) ----------
+  function isMobile() { return window.matchMedia('(max-width: 860px)').matches; }
+  function openDrawer() {
+    sidebar.classList.add('open');
+    sidebarBackdrop.classList.add('open');
+    filterBtn.setAttribute('aria-expanded', 'true');
+    drawerClose.focus();
+  }
+  function closeDrawer() {
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.remove('open');
+    filterBtn.setAttribute('aria-expanded', 'false');
+  }
+  filterBtn.addEventListener('click', openDrawer);
+  drawerClose.addEventListener('click', closeDrawer);
+  sidebarBackdrop.addEventListener('click', closeDrawer);
+  function updateFilterBadge() {
+    var n = (state.country !== 'all' ? 1 : 0) + (state.sector !== 'all' ? 1 : 0);
+    if (n) { filterBadge.textContent = n; filterBadge.hidden = false; }
+    else { filterBadge.hidden = true; }
+  }
 
   // ---------- date math ----------
   var TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
@@ -498,6 +548,7 @@
   function refilter() {
     current = DATA.filter(matches).sort(sortFn);
     countEl.innerHTML = '<b>' + current.length + '</b> of ' + DATA.length + ' live opportunities';
+    updateFilterBadge();
     viewport.scrollTop = 0;
     renderList();
   }
@@ -531,6 +582,7 @@
     state.country = b.dataset.c;
     countryChipsEl.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
     refilter();
+    if (isMobile()) closeDrawer();
   });
   sectorChartEl.addEventListener('click', function (e) {
     var row = e.target.closest('.sbar-row'); if (!row || row.dataset.other) return;
@@ -540,6 +592,7 @@
     state.sector = already ? 'all' : sector;
     if (!already) row.setAttribute('aria-pressed', 'true');
     refilter();
+    if (isMobile()) closeDrawer();
   });
   pool.addEventListener('click', function (e) {
     var star = e.target.closest('.star'); if (!star) return;
@@ -549,6 +602,7 @@
     renderList();
   });
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && sidebar.classList.contains('open')) { closeDrawer(); filterBtn.focus(); return; }
     if (e.key !== '/') return;
     var t = document.activeElement, tag = t && t.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
